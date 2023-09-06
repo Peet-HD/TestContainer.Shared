@@ -6,7 +6,7 @@ using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
 using Microsoft.Extensions.Logging;
 
-namespace TestContainer.Shared
+namespace TestContainer.Shared.Containers
 {
     public class GitlabContainer : IContainer
     {
