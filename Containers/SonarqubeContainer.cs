@@ -54,7 +54,7 @@ namespace TestContainer.Shared.Containers
 
             if (network is not null)
             {
-                containerbuilder.WithNetwork(network);
+                containerbuilder = containerbuilder.WithNetwork(network);
             }
             _container = containerbuilder.Build();
         }

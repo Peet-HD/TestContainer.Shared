@@ -38,12 +38,12 @@ namespace TestContainer.Shared.Containers
             foreach (var file in _files)
             {
                 var contentArray = Encoding.ASCII.GetBytes(file.fileContent);
-                containerBuilder.WithResourceMapping(resourceContent: contentArray, $"/usr/src/{file.fileName}");
+                containerBuilder = containerBuilder.WithResourceMapping(resourceContent: contentArray, $"/usr/src/{file.fileName}");
             }
 
             if (_network is not null)
             {
-                containerBuilder.WithNetwork(_network);
+                containerBuilder = containerBuilder.WithNetwork(_network);
             }
             _container = containerBuilder.Build();
         }
