@@ -2,6 +2,7 @@
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
+using DotNet.Testcontainers.Networks;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using TestContainer.Shared.Models.Sonarqube;
@@ -42,15 +43,20 @@ namespace TestContainer.Shared.Containers
         public event EventHandler? Stopped;
         #endregion
         private readonly IContainer _container;
-        public SonarqubeContainer()
+        public SonarqubeContainer(INetwork? network = null)
         {
-            _container = new ContainerBuilder()
+            var containerbuilder = new ContainerBuilder()
                 .WithAutoRemove(true)
                 .WithImage("sonarqube:latest")
                 .WithPortBinding(9000, true)
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(9000))
-                .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("SonarQube is operational"))
-                .Build();
+                .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("SonarQube is operational"));
+
+            if (network is not null)
+            {
+                containerbuilder.WithNetwork(network);
+            }
+            _container = containerbuilder.Build();
         }
 
 
@@ -58,7 +64,7 @@ namespace TestContainer.Shared.Containers
         {
             var client = new HttpClient();
             var request = new HttpRequestMessage(HttpMethod.Post, $"http://localhost:{port}/api/user_tokens/generate?name={tokenName}&type={type}");
-            request.Headers.Add("Authorization", "Basic YWRtaW46YWRtaW4=");
+            request.Headers.Add("Authorization", "Basic YWRtaW46YWRtaW4="); // base64: root:password
             var response = await client.SendAsync(request);
             response.EnsureSuccessStatusCode();
             var resultString = await response.Content.ReadAsStringAsync();
