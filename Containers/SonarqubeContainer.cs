@@ -52,7 +52,7 @@ namespace TestContainer.Shared.Containers
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(9000))
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("SonarQube is operational"));
 
-            if (network is not null)
+            if (network is not null) 
             {
                 containerbuilder = containerbuilder.WithNetwork(network);
             }
@@ -60,7 +60,7 @@ namespace TestContainer.Shared.Containers
         }
 
 
-        private async Task<AnalyseTokenType?> GetToken(int port, string tokenName, string type)
+        private static async Task<AnalyseTokenType?> GetToken(int port, string tokenName, string type)
         {
             var client = new HttpClient();
             var request = new HttpRequestMessage(HttpMethod.Post, $"http://localhost:{port}/api/user_tokens/generate?name={tokenName}&type={type}");
