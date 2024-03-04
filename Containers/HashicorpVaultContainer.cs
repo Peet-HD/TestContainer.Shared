@@ -1,53 +1,21 @@
-﻿using DotNet.Testcontainers.Builders;
+﻿using System.Text.Json;
+using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
 using DotNet.Testcontainers.Networks;
 using Microsoft.Extensions.Logging;
-using System.Text;
+using TestContainer.Shared.Models.Sonarqube;
+using TestContainer.Shared.Options;
 
 namespace TestContainer.Shared.Containers;
 
-public class SonarscannerCliContainer : IContainer
+public class HashicorpVaultContainer : IContainer
 {
-    private readonly IContainer _container;
+    public string UserToken { get; private set; } = string.Empty;
+    public string AnalysisToken { get; private set; } = string.Empty;
 
-    public SonarscannerCliContainer(string uri, string token, string projectKey, List<(string fileName, string fileContent)> files, INetwork? network = null)
-    {
-        var containerBuilder = new ContainerBuilder()
-            .WithWaitStrategy(Wait.ForUnixContainer())
-            .WithEnvironment(new Dictionary<string, string>
-            {
-                            { "SONAR_HOST_URL", uri },
-                            { "SONAR_TOKEN", token},
-                            { "SONAR_SCANNER_OPTS", $"-Dsonar.projectKey={projectKey}"}
-            })
-            .WithImage("sonarsource/sonar-scanner-cli");
-
-        foreach (var (fileName, fileContent) in files)
-        {
-            var contentArray = Encoding.ASCII.GetBytes(fileContent);
-            containerBuilder = containerBuilder.WithResourceMapping(resourceContent: contentArray, $"/usr/src/{fileName}");
-        }
-
-        if (network is not null)
-        {
-            containerBuilder = containerBuilder.WithNetwork(network);
-        }
-        _container = containerBuilder.Build();
-
-        _container.Creating += Creating;
-        _container.Starting += Starting;
-        _container.Stopping += Stopping;
-        _container.Created += Created;
-        _container.Started += Started;
-        _container.Stopped += Stopped;
-    }
-
-    public async Task StartAsync() => await _container.StartAsync();
-
-    public async Task StopAsync() => await _container.StopAsync();
-
+    #region IContainer Properties
     public ILogger Logger => _container.Logger;
 
     public string Id => _container.Id;
@@ -74,9 +42,62 @@ public class SonarscannerCliContainer : IContainer
     public event EventHandler? Created;
     public event EventHandler? Started;
     public event EventHandler? Stopped;
+    #endregion
+    private readonly IContainer _container;
+    public HashicorpVaultContainer(INetwork? network = null)
+    {
+        var containerbuilder = new ContainerBuilder()
+            .WithAutoRemove(true)
+            .WithImage("hashicorp/vault")
+            .WithPortBinding(8200, true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(8200))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("SonarQube is operational"));
 
-    public async Task StartAsync(CancellationToken ct = default) => await _container.StartAsync(ct);
-    public async Task StopAsync(CancellationToken ct = default) => await _container.StopAsync(ct);
+        if (network is not null)
+        {
+            containerbuilder = containerbuilder.WithNetwork(network);
+        }
+        _container = containerbuilder.Build();
+
+        _container.Creating += Creating;
+        _container.Starting += Starting;
+        _container.Stopping += Stopping;
+        _container.Created += Created;
+        _container.Started += Started;
+        _container.Stopped += Stopped;
+    }
+
+
+    private static async Task<AnalyseTokenType?> GetToken(int port, string tokenName, string type)
+    {
+        var client = new HttpClient();
+        var request = new HttpRequestMessage(HttpMethod.Post, $"http://localhost:{port}/api/user_tokens/generate?name={tokenName}&type={type}");
+        request.Headers.Add("Authorization", "Basic YWRtaW46YWRtaW4="); // base64: root:password
+        var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var resultString = await response.Content.ReadAsStringAsync();
+        var result = JsonSerializer.Deserialize<AnalyseTokenType>(resultString, GlobalOptions.JsonSerializerOptions);
+
+        return result;
+    }
+
+    public async Task StartAsync(CancellationToken ct = default)
+    {
+        await _container.StartAsync(ct);
+
+        AnalyseTokenType? analysisToken = await GetToken(_container.GetMappedPublicPort(9000), "analyseToken", "GLOBAL_ANALYSIS_TOKEN");
+        AnalyseTokenType? userToken = await GetToken(_container.GetMappedPublicPort(9000), "userToken", "USER_TOKEN");
+
+        if (analysisToken is not null) AnalysisToken = analysisToken.Token;
+        if (userToken is not null) UserToken = userToken.Token;
+    }
+
+    public async Task StopAsync(CancellationToken ct = default)
+    {
+        await _container.StopAsync(ct);
+    }
+
+    #region IContainer Implementation
     public ushort GetMappedPublicPort(int containerPort) => _container.GetMappedPublicPort(containerPort);
 
     public ushort GetMappedPublicPort(string containerPort) => _container.GetMappedPublicPort(containerPort);
@@ -97,4 +118,5 @@ public class SonarscannerCliContainer : IContainer
         GC.SuppressFinalize(this);
         return _container.DisposeAsync();
     }
+    #endregion
 }
