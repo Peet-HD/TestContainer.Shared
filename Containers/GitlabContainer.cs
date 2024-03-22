@@ -2,53 +2,22 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using DotNet.Testcontainers.Builders;
-using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
-using DotNet.Testcontainers.Images;
-using Microsoft.Extensions.Logging;
 using TestContainer.Shared.Containers.RegexPatterns;
+using TestContainer.Shared.Models;
 using TestContainer.Shared.Models.Gitlab;
 
 namespace TestContainer.Shared.Containers;
 
-public partial class GitlabContainer : IContainer
+public partial class GitlabContainer : BaseContainer
 {
     public List<PersonalAccessToken> PersonalAccessTokens { get; set; } = [];
     public string RootPassword { get; private set; } = string.Empty;
 
-    public ILogger Logger => _container.Logger;
-
-    public string Id => _container.Id;
-
-    public string Name => _container.Name;
-
-    public string IpAddress => _container.IpAddress;
-
-    public string MacAddress => _container.MacAddress;
-
-    public string Hostname => _container.Hostname;
-
-    public IImage Image => _container.Image;
-
-    public TestcontainersStates State => _container.State;
-
-    public TestcontainersHealthStatus Health => _container.Health;
-
-    public long HealthCheckFailingStreak => _container.HealthCheckFailingStreak;
-
-    public event EventHandler? Creating;
-    public event EventHandler? Starting;
-    public event EventHandler? Stopping;
-    public event EventHandler? Created;
-    public event EventHandler? Started;
-    public event EventHandler? Stopped;
-
-    private readonly IContainer _container;
-
     public GitlabContainer()
     {
         var containerName = "TestContainer_Gitlab_" + Guid.NewGuid().ToString();
-        _container = new ContainerBuilder()
+        container = new ContainerBuilder()
             .WithAutoRemove(true)
             .WithCleanUp(true)
             .WithName(containerName)
@@ -59,14 +28,6 @@ public partial class GitlabContainer : IContainer
             .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy())
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(request => request.ForPath("/users/sign_in").ForStatusCode(HttpStatusCode.OK)))
             .Build();
-
-
-        _container.Creating += Creating;
-        _container.Starting += Starting;
-        _container.Stopping += Stopping;
-        _container.Created += Created;
-        _container.Started += Started;
-        _container.Stopped += Stopped;
     }
     public async Task<PersonalAccessToken> GenerateAccessToken(PersonalAccessToken pat)
     {
@@ -101,12 +62,12 @@ public partial class GitlabContainer : IContainer
             { "runner" },
             { command }
         };
-        return await _container.ExecAsync(tokenShowCommands);
+        return await container.ExecAsync(tokenShowCommands);
     }
 
     private async Task<string> RetrieveRootPassword()
     {
-        var byteArray = await _container.ReadFileAsync("/etc/gitlab/initial_root_password");
+        var byteArray = await container.ReadFileAsync("/etc/gitlab/initial_root_password");
 
         string fileContent = Encoding.UTF8.GetString(byteArray);
         string pattern = @"Password: .*";
@@ -118,37 +79,9 @@ public partial class GitlabContainer : IContainer
         return splits[1];
     }
 
-    public async Task StartAsync(CancellationToken ct = default)
+    public new async Task StartAsync(CancellationToken ct = default)
     {
-        await _container.StartAsync(ct);
-        _ = await RetrieveRootPassword();
+        RootPassword = await RetrieveRootPassword();
+        await base.StartAsync(ct);
     }
-
-    public async Task StopAsync(CancellationToken ct = default)
-    {
-        await _container.StopAsync(ct);
-    }
-
-    #region IContainer Implementation
-    public ushort GetMappedPublicPort(int containerPort) => _container.GetMappedPublicPort(containerPort);
-
-    public ushort GetMappedPublicPort(string containerPort) => _container.GetMappedPublicPort(containerPort);
-
-    public Task<long> GetExitCodeAsync(CancellationToken ct = default) => _container.GetExitCodeAsync(ct);
-
-    public Task<(string Stdout, string Stderr)> GetLogsAsync(DateTime since = default, DateTime until = default, bool timestampsEnabled = true, CancellationToken ct = default) => _container.GetLogsAsync(since, until, timestampsEnabled, ct);
-
-
-    public Task CopyAsync(byte[] fileContent, string filePath, UnixFileModes fileMode = UnixFileModes.OtherRead | UnixFileModes.GroupRead | UnixFileModes.UserWrite | UnixFileModes.UserRead, CancellationToken ct = default) => _container.CopyAsync(fileContent, filePath, fileMode, ct);
-    public Task CopyAsync(string source, string target, UnixFileModes fileMode = UnixFileModes.OtherRead | UnixFileModes.GroupRead | UnixFileModes.UserWrite | UnixFileModes.UserRead, CancellationToken ct = default) => _container.CopyAsync(source, target, fileMode, ct);
-    public Task CopyAsync(DirectoryInfo source, string target, UnixFileModes fileMode = UnixFileModes.OtherRead | UnixFileModes.GroupRead | UnixFileModes.UserWrite | UnixFileModes.UserRead, CancellationToken ct = default) => _container.CopyAsync(source, target, fileMode, ct);
-    public Task CopyAsync(FileInfo source, string target, UnixFileModes fileMode = UnixFileModes.OtherRead | UnixFileModes.GroupRead | UnixFileModes.UserWrite | UnixFileModes.UserRead, CancellationToken ct = default) => _container.CopyAsync(source, target, fileMode, ct);
-    public Task<byte[]> ReadFileAsync(string filePath, CancellationToken ct = default) => _container.ReadFileAsync(filePath, ct);
-    public Task<ExecResult> ExecAsync(IList<string> command, CancellationToken ct = default) => _container.ExecAsync(command, ct);
-    public ValueTask DisposeAsync()
-    {
-        GC.SuppressFinalize(this);
-        return _container.DisposeAsync();
-    }
-    #endregion
 }
